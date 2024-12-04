@@ -112,9 +112,10 @@ def get_sr_landsat_collection(
         )
 
     def apply_scale_factors(image):
-        optical_bands = image.select('SR_B.').multiply(0.0000275).add(-0.2).multiply(10000)
+        optical_bands = (
+            image.select("SR_B.").multiply(0.0000275).add(-0.2).multiply(10000)
+        )
         return image.addBands(optical_bands, None, True)
-
 
     lc09_col = ee.ImageCollection("LANDSAT/LC09/C02/T1_L2")
     lc08_col = ee.ImageCollection("LANDSAT/LC08/C02/T1_L2")
@@ -374,7 +375,18 @@ def get_sen1_collection(
     start_date: datetime.datetime,
     end_date: datetime.datetime,
     orbit_pass: int = pb_gee_tools.PB_GEE_SEN1_ASCENDING,
+    add_ndpi: bool = False,
 ):
+    def _msk_s1_edge(image):
+        edge = image.lt(-40.0)
+        masked_image = image.mask().And(edge.Not())
+        return image.updateMask(masked_image)
+
+    def _add_ndpi(s1_img):
+        band_index_exp = "(b(0) - b(1)) / (b(0) + b(1))"
+        npdi_img = s1_img.expression(band_index_exp).rename("NDPI")
+        return s1_img.addBands(npdi_img)
+
     sen1_start = datetime.datetime(year=2014, month=4, day=1)
     sen1_end = datetime.datetime.now()
 
@@ -402,11 +414,17 @@ def get_sen1_collection(
     else:
         raise Exception("Orbit must be ASCENDING or DESCENDING")
 
-    return (
+    s1_img_col = (
         ee.ImageCollection("COPERNICUS/S1_GRD")
         .filterBounds(aoi)
         .filterDate(ee_start_date, ee_end_date)
         .filter(ee.Filter.eq("instrumentMode", "IW"))
         .filter(ee.Filter.eq("orbitProperties_pass", orbit_pass_str))
         .select(["VV", "VH"])
+        .map(_msk_s1_edge)
     )
+
+    if add_ndpi:
+        s1_img_col = s1_img_col.map(_add_ndpi)
+
+    return s1_img_col
