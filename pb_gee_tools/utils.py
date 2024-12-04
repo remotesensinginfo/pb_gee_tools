@@ -86,6 +86,7 @@ def create_year_month_start_end_lst(
 
     return out_year_mnt_lst
 
+
 def create_year_month_n_months_lst(
     start_year: int, start_month: int, n_months: int
 ) -> List[Tuple[int, int]]:
@@ -124,6 +125,7 @@ def create_year_month_n_months_lst(
             out_year_mnt_lst.append((year, month + 1))
 
     return out_year_mnt_lst
+
 
 def find_month_end_date(year: int, month: int) -> int:
     """
