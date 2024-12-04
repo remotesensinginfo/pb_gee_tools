@@ -428,3 +428,121 @@ def get_sen1_collection(
         s1_img_col = s1_img_col.map(_add_ndpi)
 
     return s1_img_col
+
+
+def get_modis_albedo_collection(
+    aoi: ee.Geometry,
+    start_date: datetime.datetime,
+    end_date: datetime.datetime,
+):
+    def _add_vld_bands(img):
+        # Get quality bands
+        b1_quality = ee.Image(img.get("modis_MCD43")).select(
+            "BRDF_Albedo_Band_Quality_Band1"
+        )
+        b2_quality = ee.Image(img.get("modis_MCD43")).select(
+            "BRDF_Albedo_Band_Quality_Band2"
+        )
+        b3_quality = ee.Image(img.get("modis_MCD43")).select(
+            "BRDF_Albedo_Band_Quality_Band3"
+        )
+        b4_quality = ee.Image(img.get("modis_MCD43")).select(
+            "BRDF_Albedo_Band_Quality_Band4"
+        )
+        b5_quality = ee.Image(img.get("modis_MCD43")).select(
+            "BRDF_Albedo_Band_Quality_Band5"
+        )
+        b6_quality = ee.Image(img.get("modis_MCD43")).select(
+            "BRDF_Albedo_Band_Quality_Band6"
+        )
+        b7_quality = ee.Image(img.get("modis_MCD43")).select(
+            "BRDF_Albedo_Band_Quality_Band7"
+        )
+
+        # Add quality bands to the image.
+        return img.addBands(
+            ee.Image(
+                [
+                    b1_quality,
+                    b2_quality,
+                    b3_quality,
+                    b4_quality,
+                    b5_quality,
+                    b6_quality,
+                    b7_quality,
+                ]
+            )
+        )
+
+    def _mask_qa_combined(img):
+        qa_b1_mask = img.select("BRDF_Albedo_Band_Quality_Band1").lt(3)
+        qa_b2_mask = img.select("BRDF_Albedo_Band_Quality_Band2").lt(3)
+        qa_b3_mask = img.select("BRDF_Albedo_Band_Quality_Band3").lt(3)
+        qa_b4_mask = img.select("BRDF_Albedo_Band_Quality_Band4").lt(3)
+        qa_b5_mask = img.select("BRDF_Albedo_Band_Quality_Band5").lt(3)
+        qa_b6_mask = img.select("BRDF_Albedo_Band_Quality_Band6").lt(3)
+        qa_b7_mask = img.select("BRDF_Albedo_Band_Quality_Band7").lt(3)
+
+        return (
+            img.updateMask(qa_b1_mask)
+            .updateMask(qa_b2_mask)
+            .updateMask(qa_b3_mask)
+            .updateMask(qa_b4_mask)
+            .updateMask(qa_b5_mask)
+            .updateMask(qa_b6_mask)
+            .updateMask(qa_b7_mask)
+        )
+
+    modis_alb_img_col = (
+        ee.ImageCollection("MODIS/061/MCD43A3")
+        .filterBounds(aoi)
+        .filterDate(start_date, end_date)
+    )
+    modis_alb_qual_img_col = (
+        ee.ImageCollection("MODIS/061/MCD43A2")
+        .filterBounds(aoi)
+        .filterDate(start_date, end_date)
+    )
+
+    modis_mcd43_img_col = ee.ImageCollection(
+        ee.Join.saveFirst("modis_MCD43").apply(
+            **{
+                "primary": modis_alb_img_col,
+                "secondary": modis_alb_qual_img_col,
+                "condition": ee.Filter.equals(
+                    **{
+                        "leftField": "system:time_start",
+                        "rightField": "system:time_start",
+                    }
+                ),
+            }
+        )
+    )
+
+    modis_img_qual_col = modis_mcd43_img_col.map(_add_vld_bands)
+    modis_img_qual_mskd_col = modis_img_qual_col.map(_mask_qa_combined)
+
+    return modis_img_qual_mskd_col.select(
+        [
+            "Albedo_BSA_Band1",
+            "Albedo_BSA_Band2",
+            "Albedo_BSA_Band3",
+            "Albedo_BSA_Band4",
+            "Albedo_BSA_Band5",
+            "Albedo_BSA_Band6",
+            "Albedo_BSA_Band7",
+            "Albedo_BSA_vis",
+            "Albedo_BSA_nir",
+            "Albedo_BSA_shortwave",
+            "Albedo_WSA_Band1",
+            "Albedo_WSA_Band2",
+            "Albedo_WSA_Band3",
+            "Albedo_WSA_Band4",
+            "Albedo_WSA_Band5",
+            "Albedo_WSA_Band6",
+            "Albedo_WSA_Band7",
+            "Albedo_WSA_vis",
+            "Albedo_WSA_nir",
+            "Albedo_WSA_shortwave",
+        ]
+    )
