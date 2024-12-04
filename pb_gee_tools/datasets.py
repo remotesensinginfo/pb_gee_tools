@@ -58,7 +58,7 @@ def get_sr_landsat_collection(
     ls_start = datetime.datetime(year=1982, month=7, day=16)
     ls_end = datetime.datetime.now()
 
-    if not pb_gee_tools.utils._do_dates_overlap(
+    if not pb_gee_tools.utils.do_dates_overlap(
         s1_date=start_date, e1_date=end_date, s2_date=ls_start, e2_date=ls_end
     ):
         raise Exception(
@@ -143,23 +143,23 @@ def get_sr_landsat_collection(
     use_ls7 = False
     use_ls5 = False
     use_ls4 = False
-    if pb_gee_tools.utils._do_dates_overlap(
+    if pb_gee_tools.utils.do_dates_overlap(
         s1_date=start_date, e1_date=end_date, s2_date=ls9_start, e2_date=ls9_end
     ):
         use_ls9 = True
-    if pb_gee_tools.utils._do_dates_overlap(
+    if pb_gee_tools.utils.do_dates_overlap(
         s1_date=start_date, e1_date=end_date, s2_date=ls8_start, e2_date=ls8_end
     ):
         use_ls8 = True
-    if pb_gee_tools.utils._do_dates_overlap(
+    if pb_gee_tools.utils.do_dates_overlap(
         s1_date=start_date, e1_date=end_date, s2_date=ls7_start, e2_date=ls7_end
     ):
         use_ls7 = True
-    if pb_gee_tools.utils._do_dates_overlap(
+    if pb_gee_tools.utils.do_dates_overlap(
         s1_date=start_date, e1_date=end_date, s2_date=ls5_start, e2_date=ls5_end
     ):
         use_ls5 = True
-    if pb_gee_tools.utils._do_dates_overlap(
+    if pb_gee_tools.utils.do_dates_overlap(
         s1_date=start_date, e1_date=end_date, s2_date=ls4_start, e2_date=ls4_end
     ):
         use_ls4 = True
@@ -241,7 +241,7 @@ def get_sen2_sr_harm_collection(
     sen2_start = datetime.datetime(year=2015, month=7, day=1)
     sen2_end = datetime.datetime.now()
 
-    if not pb_gee_tools.utils._do_dates_overlap(
+    if not pb_gee_tools.utils.do_dates_overlap(
         s1_date=start_date, e1_date=end_date, s2_date=sen2_start, e2_date=sen2_end
     ):
         raise Exception(
@@ -390,7 +390,7 @@ def get_sen1_collection(
     sen1_start = datetime.datetime(year=2014, month=4, day=1)
     sen1_end = datetime.datetime.now()
 
-    if not pb_gee_tools.utils._do_dates_overlap(
+    if not pb_gee_tools.utils.do_dates_overlap(
         s1_date=start_date, e1_date=end_date, s2_date=sen1_start, e2_date=sen1_end
     ):
         raise Exception(
