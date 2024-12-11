@@ -228,7 +228,7 @@ def get_sr_landsat_collection(
     return out_col
 
 
-def get_sen2_sr_harm_collection(
+def get_sen2_s2cloudless_sr_harm_collection(
     aoi: ee.Geometry,
     start_date: datetime.datetime,
     end_date: datetime.datetime,
@@ -367,6 +367,54 @@ def get_sen2_sr_harm_collection(
         s2_sr_cld_col.map(_add_cld_shdw_mask)
         .map(_apply_cld_shdw_mask)
         .select(["B2", "B3", "B4", "B5", "B6", "B7", "B8", "B8A", "B11", "B12"])
+    )
+
+
+def get_sen2_cloud_plus_sr_harm_collection(
+    aoi: ee.Geometry,
+    start_date: datetime.datetime,
+    end_date: datetime.datetime,
+    cloud_thres: int = 50,
+    cloud_clear_thres: float = 0.60,
+) -> ee.ImageCollection:
+    sen2_start = datetime.datetime(year=2015, month=7, day=1)
+    sen2_end = datetime.datetime.now()
+
+    if not pb_gee_tools.utils.do_dates_overlap(
+        s1_date=start_date, e1_date=end_date, s2_date=sen2_start, e2_date=sen2_end
+    ):
+        raise Exception(
+            "Date range specified does not overlap "
+            "with the availability of Sentinel-2 imagery."
+        )
+
+    ee_start_date = ee.Date.fromYMD(
+        ee.Number(start_date.year),
+        ee.Number(start_date.month),
+        ee.Number(start_date.day),
+    )
+    ee_end_date = ee.Date.fromYMD(
+        ee.Number(end_date.year), ee.Number(end_date.month), ee.Number(end_date.day)
+    )
+
+    s2_img_col = ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
+    cs_plus_img_col = ee.ImageCollection("GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED")
+    qa_band = "cs_cdf"
+
+    def _apply_s2_cloud_pls_msk(img):
+        return img.updateMask(img.select(qa_band).gte(cloud_clear_thres))
+
+    # Import and filter S2 SR.
+    s2_sr_col = (
+        s2_img_col.filterBounds(aoi)
+        .filterDate(ee_start_date, ee_end_date)
+        .filter(ee.Filter.lte("CLOUDY_PIXEL_PERCENTAGE", cloud_thres))
+        .linkCollection(cs_plus_img_col, [qa_band])
+        .map(_apply_s2_cloud_pls_msk)
+    )
+
+    return s2_sr_col.select(
+        ["B2", "B3", "B4", "B5", "B6", "B7", "B8", "B8A", "B11", "B12"]
     )
 
 
