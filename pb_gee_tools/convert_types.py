@@ -1,4 +1,5 @@
 import ee
+from typing import Union, List, Tuple
 
 
 def get_vec_file_bbox_wgs84(vec_file, vec_lyr=None):
@@ -57,18 +58,105 @@ def get_gee_pts(
     """
     import geopandas
 
+    if vec_roi_file is not None:
+        vec_roi_gdf = geopandas.read_file(vec_roi_file, layer=vec_roi_lyr).to_crs(4326)
+        if vec_roi_gdf.geom_type[0] != "Polygon":
+            raise Exception("Input ROI layer needs to be Polygon")
+    else:
+        vec_roi_gdf = None
+
+    return get_gee_pts_gp(
+        vec_file, vec_lyr, rnd_smpl, rnd_seed, use_replace, vec_roi_gdf
+    )
+
+
+def get_gee_pts_bbox(
+    vec_file: str,
+    vec_lyr: str = None,
+    rnd_smpl: int = None,
+    rnd_seed: int = None,
+    use_replace: bool = False,
+    bbox: Union[Tuple[float, float, float, float], List[float]] = None,
+):
+    """
+    A function which converts an input vector file into a ee.geometry.MultiPoint
+    object. This function is intended to be used to when reading a set of points
+    as training data for classification. If provided the points will be subsetted
+    using an region of interest polygon.
+
+    :param vec_file: file path for the vector file which must be of type Points.
+    :param vec_lyr: vector layer name
+    :param rnd_smpl: Optionally randomly sample the data to retreve a subset of the
+                     input options. (e.g., return 100 points)
+    :param rnd_seed: Optionally seed the random number generator for reproducibility.
+    :param use_replace: Optionally use replacement when randomly sampling the
+                        vector layer.
+    :param bbox: the bounding box (xMin, xMax, yMin, yMax): EPSG:4326.
+    :return: ee.Geometry.MultiPoint
+
+    """
+    import geopandas
+    from shapely.geometry import Polygon
+
+    if bbox is not None:
+        polygons = [
+            Polygon(
+                [
+                    (bbox[0], bbox[2]),
+                    (bbox[0], bbox[3]),
+                    (bbox[1], bbox[3]),
+                    (bbox[1], bbox[2]),
+                ]
+            )
+        ]
+        vec_roi_gdf = geopandas.GeoDataFrame({"geometry": polygons})
+        vec_roi_gdf = vec_roi_gdf.set_crs("EPSG:4326", allow_override=True)
+    else:
+        vec_roi_gdf = None
+
+    return get_gee_pts_gp(
+        vec_file, vec_lyr, rnd_smpl, rnd_seed, use_replace, vec_roi_gdf
+    )
+
+
+def get_gee_pts_gp(
+    vec_file: str,
+    vec_lyr: str = None,
+    rnd_smpl: int = None,
+    rnd_seed: int = None,
+    use_replace: bool = False,
+    gp_roi_gdf=None,
+):
+    """
+    A function which converts an input vector file into a ee.geometry.MultiPoint
+    object. This function is intended to be used to when reading a set of points
+    as training data for classification. If provided the points will be subsetted
+    using an region of interest polygon.
+
+    :param vec_file: file path for the vector file which must be of type Points.
+    :param vec_lyr: vector layer name
+    :param rnd_smpl: Optionally randomly sample the data to retreve a subset of the
+                     input options. (e.g., return 100 points)
+    :param rnd_seed: Optionally seed the random number generator for reproducibility.
+    :param use_replace: Optionally use replacement when randomly sampling the
+                        vector layer.
+    :param gp_roi_gdf: geopandas object
+    :return: ee.Geometry.MultiPoint
+
+    """
+    import geopandas
+
     # Read the vector layer and make sure it is project using WGS84 (EPSG:4326)
     vec_gdf = geopandas.read_file(vec_file, layer=vec_lyr).to_crs(4326)
 
     if vec_gdf.geom_type[0] != "Point":
         raise Exception("Input layer needs to be Point")
 
-    if vec_roi_file is not None:
-        vec_roi_gdf = geopandas.read_file(vec_roi_file, layer=vec_roi_lyr).to_crs(4326)
-        if vec_roi_gdf.geom_type[0] != "Polygon":
+    if gp_roi_gdf is not None:
+        if gp_roi_gdf.geom_type[0] != "Polygon":
             raise Exception("Input ROI layer needs to be Polygon")
 
-        vec_gdf = vec_gdf.clip(vec_roi_gdf)
+        vec_gdf = vec_gdf.clip(gp_roi_gdf)
 
     if rnd_smpl is not None:
         vec_gdf = vec_gdf.sample(n=rnd_smpl, replace=use_replace, random_state=rnd_seed)
@@ -80,7 +168,6 @@ def get_gee_pts(
 
     pts = list()
     for row in coords.iterrows():
-        # print(row[1].x, row[1].y)
         pts.append(ee.Geometry.Point([row[1].x, row[1].y]))
     gee_pts = ee.Geometry.MultiPoint(pts)
     return gee_pts
