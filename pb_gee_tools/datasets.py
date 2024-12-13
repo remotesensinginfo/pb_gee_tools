@@ -418,6 +418,171 @@ def get_sen2_cloud_plus_sr_harm_collection(
     )
 
 
+def get_sen2_combined_cldmsk_sr_harm_collection(
+    aoi: ee.Geometry,
+    start_date: datetime.datetime,
+    end_date: datetime.datetime,
+    cloud_thres: int = 50,
+    cld_prb_thres: float = 50,
+    nir_drk_thres: float = 0.15,
+    cld_prj_dist: float = 1,
+    clds_buffer: float = 50,
+    cloud_clear_thres: float = 0.60,
+) -> ee.ImageCollection:
+    """
+    Applies both s2cloudless and cloud+ masking
+
+    :param aoi:
+    :param start_date:
+    :param end_date:
+    :param cloud_thres:
+    :param cld_prb_thres:
+    :param nir_drk_thres:
+    :param cld_prj_dist:
+    :param clds_buffer:
+    :param cloud_clear_thres:
+    :return:
+    """
+    sen2_start = datetime.datetime(year=2015, month=7, day=1)
+    sen2_end = datetime.datetime.now()
+
+    if not pb_gee_tools.utils.do_dates_overlap(
+        s1_date=start_date, e1_date=end_date, s2_date=sen2_start, e2_date=sen2_end
+    ):
+        raise Exception(
+            "Date range specified does not overlap "
+            "with the availability of Sentinel-2 imagery."
+        )
+
+    ee_start_date = ee.Date.fromYMD(
+        ee.Number(start_date.year),
+        ee.Number(start_date.month),
+        ee.Number(start_date.day),
+    )
+    ee_end_date = ee.Date.fromYMD(
+        ee.Number(end_date.year), ee.Number(end_date.month), ee.Number(end_date.day)
+    )
+
+    def _add_cloud_bands(img):
+        # Get s2cloudless image, subset the probability band.
+        cld_prb = ee.Image(img.get("s2cloudless")).select("probability")
+
+        # Condition s2cloudless by the probability threshold value.
+        is_cloud = cld_prb.gt(cld_prb_thres).rename("clouds")
+
+        # Add the cloud probability layer and cloud mask as image bands.
+        return img.addBands(ee.Image([cld_prb, is_cloud]))
+
+    def _add_shadow_bands(img):
+        # Identify water pixels from the SCL band.
+        not_water = img.select("SCL").neq(6)
+
+        # Identify dark NIR pixels that are not water (potential cloud shadow pixels).
+        SR_BAND_SCALE = 1e4
+        dark_pixels = (
+            img.select("B8")
+            .lt(nir_drk_thres * SR_BAND_SCALE)
+            .multiply(not_water)
+            .rename("dark_pixels")
+        )
+
+        # Determine the direction to project cloud shadow from clouds (assumes UTM projection).
+        shadow_azimuth = ee.Number(90).subtract(
+            ee.Number(img.get("MEAN_SOLAR_AZIMUTH_ANGLE"))
+        )
+
+        # Project shadows from clouds for the distance specified by the CLD_PRJ_DIST input.
+        cld_proj = (
+            img.select("clouds")
+            .directionalDistanceTransform(shadow_azimuth, cld_prj_dist * 10)
+            .reproject(**{"crs": img.select(0).projection(), "scale": 100})
+            .select("distance")
+            .mask()
+            .rename("cloud_transform")
+        )
+
+        # Identify the intersection of dark pixels with cloud shadow projection.
+        shadows = cld_proj.multiply(dark_pixels).rename("shadows")
+
+        # Add dark pixels, cloud projection, and identified shadows as image bands.
+        return img.addBands(ee.Image([dark_pixels, cld_proj, shadows]))
+
+    def _add_cld_shdw_mask(img):
+        # Add cloud component bands.
+        img_cloud = _add_cloud_bands(img)
+
+        # Add cloud shadow component bands.
+        img_cloud_shadow = _add_shadow_bands(img_cloud)
+
+        # Combine cloud and shadow mask, set cloud and shadow as value 1, else 0.
+        is_cld_shdw = (
+            img_cloud_shadow.select("clouds")
+            .add(img_cloud_shadow.select("shadows"))
+            .gt(0)
+        )
+
+        # Remove small cloud-shadow patches and dilate remaining pixels by clds_buffer input.
+        # 20 m scale is for speed, and assumes clouds don't require 10 m precision.
+        is_cld_shdw = (
+            is_cld_shdw.focalMin(2)
+            .focalMax(clds_buffer * 2 / 20)
+            .reproject(**{"crs": img.select([0]).projection(), "scale": 20})
+            .rename("cloudmask")
+        )
+
+        # Add the final cloud-shadow mask to the image.
+        return img_cloud_shadow.addBands(is_cld_shdw)
+
+    def _apply_cld_shdw_mask(img):
+        # Subset the cloudmask band and invert it so clouds/shadow are 0, else 1.
+        not_cld_shdw = img.select("cloudmask").Not()
+
+        # Subset reflectance bands and update their masks, return the result.
+        return img.select("B.*").updateMask(not_cld_shdw)
+
+    cs_plus_img_col = ee.ImageCollection("GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED")
+    qa_band = "cs_cdf"
+
+    def _apply_s2_cloud_pls_msk(img):
+        return img.updateMask(img.select(qa_band).gte(cloud_clear_thres))
+
+    # Import and filter S2 SR.
+    s2_sr_col = (
+        ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
+        .filterBounds(aoi)
+        .filterDate(ee_start_date, ee_end_date)
+        .filter(ee.Filter.lte("CLOUDY_PIXEL_PERCENTAGE", cloud_thres))
+        .linkCollection(cs_plus_img_col, [qa_band])
+        .map(_apply_s2_cloud_pls_msk)
+    )
+
+    # Import and filter s2cloudless.
+    s2_cloudless_col = (
+        ee.ImageCollection("COPERNICUS/S2_CLOUD_PROBABILITY")
+        .filterBounds(aoi)
+        .filterDate(ee_start_date, ee_end_date)
+    )
+
+    # Join the filtered s2cloudless collection to the SR collection by the 'system:index' property.
+    s2_sr_cld_col = ee.ImageCollection(
+        ee.Join.saveFirst("s2cloudless").apply(
+            **{
+                "primary": s2_sr_col,
+                "secondary": s2_cloudless_col,
+                "condition": ee.Filter.equals(
+                    **{"leftField": "system:index", "rightField": "system:index"}
+                ),
+            }
+        )
+    )
+
+    return (
+        s2_sr_cld_col.map(_add_cld_shdw_mask)
+        .map(_apply_cld_shdw_mask)
+        .select(["B2", "B3", "B4", "B5", "B6", "B7", "B8", "B8A", "B11", "B12"])
+    )
+
+
 def get_sen1_collection(
     aoi: ee.Geometry,
     start_date: datetime.datetime,
