@@ -1,5 +1,7 @@
+import os
 import ee
 from typing import Union, List, Tuple
+import geopandas
 
 
 def get_vec_file_bbox_wgs84(vec_file, vec_lyr=None):
@@ -12,10 +14,11 @@ def get_vec_file_bbox_wgs84(vec_file, vec_lyr=None):
     :return: ee.Geometry.BBox
 
     """
-    import geopandas
-
     # Read the vector layer and make sure it is project using WGS84 (EPSG:4326)
-    vec_gdf = geopandas.read_file(vec_file, layer=vec_lyr).to_crs(4326)
+    if "parquet" in os.path.basename(vec_file):
+        vec_gdf = geopandas.read_parquet(vec_file)
+    else:
+        vec_gdf = geopandas.read_file(vec_file, layer=vec_lyr).to_crs(4326)
 
     # Get layer bbox: minx, miny, maxx, maxy
     gp_bbox = vec_gdf.total_bounds
@@ -42,7 +45,7 @@ def get_gee_pts(
     A function which converts an input vector file into a ee.geometry.MultiPoint
     object. This function is intended to be used to when reading a set of points
     as training data for classification. If provided the points will be subsetted
-    using an region of interest polygon.
+    using a region of interest polygon.
 
     :param vec_file: file path for the vector file which must be of type Points.
     :param vec_lyr: vector layer name
@@ -56,11 +59,14 @@ def get_gee_pts(
     :return: ee.Geometry.MultiPoint
 
     """
-    import geopandas
-
     if vec_roi_file is not None:
-        vec_roi_gdf = geopandas.read_file(vec_roi_file, layer=vec_roi_lyr).to_crs(4326)
-        if vec_roi_gdf.geom_type[0] != "Polygon":
+        if "parquet" in os.path.basename(vec_roi_file):
+            vec_roi_gdf = geopandas.read_parquet(vec_roi_file)
+        else:
+            vec_roi_gdf = geopandas.read_file(vec_roi_file, layer=vec_roi_lyr).to_crs(
+                4326
+            )
+        if vec_roi_gdf.geom_type.iat[0] != "Polygon":
             raise Exception("Input ROI layer needs to be Polygon")
     else:
         vec_roi_gdf = None
@@ -82,7 +88,7 @@ def get_gee_pts_bbox(
     A function which converts an input vector file into a ee.geometry.MultiPoint
     object. This function is intended to be used to when reading a set of points
     as training data for classification. If provided the points will be subsetted
-    using an region of interest polygon.
+    using a region of interest polygon.
 
     :param vec_file: file path for the vector file which must be of type Points.
     :param vec_lyr: vector layer name
@@ -95,7 +101,6 @@ def get_gee_pts_bbox(
     :return: ee.Geometry.MultiPoint
 
     """
-    import geopandas
     from shapely.geometry import Polygon
 
     if bbox is not None:
@@ -125,13 +130,13 @@ def get_gee_pts_gp(
     rnd_smpl: int = None,
     rnd_seed: int = None,
     use_replace: bool = False,
-    gp_roi_gdf=None,
+    gp_roi_gdf: geopandas.GeoDataFrame = None,
 ):
     """
     A function which converts an input vector file into a ee.geometry.MultiPoint
     object. This function is intended to be used to when reading a set of points
     as training data for classification. If provided the points will be subsetted
-    using an region of interest polygon.
+    using a region of interest polygon.
 
     :param vec_file: file path for the vector file which must be of type Points.
     :param vec_lyr: vector layer name
@@ -144,16 +149,49 @@ def get_gee_pts_gp(
     :return: ee.Geometry.MultiPoint
 
     """
-    import geopandas
-
     # Read the vector layer and make sure it is project using WGS84 (EPSG:4326)
-    vec_gdf = geopandas.read_file(vec_file, layer=vec_lyr).to_crs(4326)
+    if "parquet" in os.path.basename(vec_file):
+        vec_gdf = geopandas.read_parquet(vec_file).to_crs(4326)
+    else:
+        vec_gdf = geopandas.read_file(vec_file, layer=vec_lyr).to_crs(4326)
 
-    if vec_gdf.geom_type[0] != "Point":
+    return get_gee_pts_gp_gdf(
+        vec_gdf,
+        rnd_smpl,
+        rnd_seed,
+        use_replace,
+        gp_roi_gdf,
+    )
+
+
+def get_gee_pts_gp_gdf(
+    vec_gdf: geopandas.GeoDataFrame,
+    rnd_smpl: int = None,
+    rnd_seed: int = None,
+    use_replace: bool = False,
+    gp_roi_gdf: geopandas.GeoDataFrame = None,
+):
+    """
+    A function which converts an input vector file into a ee.geometry.MultiPoint
+    object. This function is intended to be used to when reading a set of points
+    as training data for classification. If provided the points will be subsetted
+    using a region of interest polygon.
+
+    :param vec_gdf: geopandas GeoDataframe of the type Points.
+    :param rnd_smpl: Optionally randomly sample the data to retreve a subset of the
+                     input options. (e.g., return 100 points)
+    :param rnd_seed: Optionally seed the random number generator for reproducibility.
+    :param use_replace: Optionally use replacement when randomly sampling the
+                        vector layer.
+    :param gp_roi_gdf: geopandas object
+    :return: ee.Geometry.MultiPoint
+
+    """
+    if vec_gdf.geom_type.iat[0] != "Point":
         raise Exception("Input layer needs to be Point")
 
     if gp_roi_gdf is not None:
-        if gp_roi_gdf.geom_type[0] != "Polygon":
+        if gp_roi_gdf.geom_type.iat[0] != "Polygon":
             raise Exception("Input ROI layer needs to be Polygon")
 
         vec_gdf = vec_gdf.clip(gp_roi_gdf)
