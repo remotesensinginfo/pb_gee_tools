@@ -83,7 +83,7 @@ def get_sr_landsat_collection(
         )
 
     def _mask_clouds(img):
-        qa_mask = img.select("QA_PIXEL").bitwiseAnd(int("11111", 2)).eq(0)
+        qa_mask = img.select("QA_PIXEL").bitwiseAnd(int("11111", 2)).eq(0).rename("QA_MASK")
         sat_mask = img.select("QA_RADSAT").eq(0)
         return img.updateMask(qa_mask).updateMask(sat_mask)
 
