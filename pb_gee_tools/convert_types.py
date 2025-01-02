@@ -34,9 +34,11 @@ def get_vec_file_bbox_wgs84(vec_file, vec_lyr=None):
 def convert_vector_to_gee_polygon(vec_file: str, vec_lyr: str = None):
     """
     Converts a vector file with a single polygon to a ee.Geometry.Polygon object.
+
     :param vec_file: file path to the vector file
     :param vec_lyr: vector layer name
     :return: an ee.Geometry.Polygon object
+
     """
 
     # Check the vector file extension
@@ -62,6 +64,7 @@ def get_gee_multi_polygon(vec_file: str, vec_lyr: str = None):
     :param vec_file: file path to the vector file
     :param vec_lyr: vector layer name
     :return: ee.Geometry.MultiPolygon
+
     """
 
     # Check the vector file extension
