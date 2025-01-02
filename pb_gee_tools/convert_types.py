@@ -6,12 +6,11 @@ import geopandas
 
 def get_vec_file_bbox_wgs84(vec_file, vec_lyr=None):
     """
-    A function which creates a bounding box (ee.geometry.BBox) ee object
-    representing the bounding box of the input vector file.
-
-    :param vec_file: file path for the vector file
-    :param vec_lyr: vector layer name
-    :return: ee.Geometry.BBox
+    :param vec_file: A file path to the vector file that contains the spatial data.
+    :param vec_lyr: The name of the layer within the vector file to be used
+                    for processing. Default is None.
+    :return: An Earth Engine Geometry object representing the bounding box of the
+             vector data in WGS84 (EPSG:4326) projection.
 
     """
     # Read the vector layer and make sure it is project using WGS84 (EPSG:4326)
@@ -30,6 +29,58 @@ def get_vec_file_bbox_wgs84(vec_file, vec_lyr=None):
     roi_south = gp_bbox[1]
     vec_bbox_aoi = ee.Geometry.BBox(roi_west, roi_south, roi_east, roi_north)
     return vec_bbox_aoi
+
+
+def convert_vector_to_gee_polygon(vec_file: str, vec_lyr: str = None):
+    """
+    Converts a vector file with a single polygon to a ee.Geometry.Polygon object.
+    :param vec_file: file path to the vector file
+    :param vec_lyr: vector layer name
+    :return: an ee.Geometry.Polygon object
+    """
+
+    # Check the vector file extension
+    if "parquet" in os.path.basename(vec_file):
+        vec_gdf = geopandas.read_parquet(vec_file)
+    else:
+        vec_gdf = geopandas.read_file(vec_file, layer=vec_lyr).to_crs(4326)
+
+    if vec_gdf.geom_type.iat[0] != "Polygon":
+        raise Exception("Input layer needs to be Polygon")
+
+    # Convert the polygon to an Earth Engine object
+    polygon = ee.Geometry.Polygon(list(map(list, vec_gdf.geometry[0].exterior.coords)))
+
+    return polygon
+
+
+def get_gee_multi_polygon(vec_file: str, vec_lyr: str = None):
+    """
+    A function which converts an input vector file into
+    a ee.Geometry.MultiPolygon object.
+
+    :param vec_file: file path to the vector file
+    :param vec_lyr: vector layer name
+    :return: ee.Geometry.MultiPolygon
+    """
+
+    # Check the vector file extension
+    if "parquet" in os.path.basename(vec_file):
+        vec_gdf = geopandas.read_parquet(vec_file)
+    else:
+        vec_gdf = geopandas.read_file(vec_file, layer=vec_lyr).to_crs(4326)
+
+    if vec_gdf.geom_type.iat[0] != "Polygon":
+        raise Exception("Input layer needs to be Polygon")
+
+    # Convert polygons to Earth Engine objects
+    polygons = [
+        ee.Geometry.Polygon(list(map(list, p.exterior.coords)))
+        for p in vec_gdf.geometry
+    ]
+
+    # Return a ee.Geometry.MultiPolygon
+    return ee.Geometry.MultiPolygon(polygons)
 
 
 def get_gee_pts(
