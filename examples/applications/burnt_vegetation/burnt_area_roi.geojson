@@ -1,0 +1,8 @@
+{
+"type": "FeatureCollection",
+"name": "burnt_area_roi",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
+"features": [
+{ "type": "Feature", "properties": { }, "geometry": { "type": "Polygon", "coordinates": [ [ [ -6.907378121486168, 40.318654446111779 ], [ -6.550113816488582, 40.312126206613456 ], [ -6.559801818087045, 40.060223703498288 ], [ -6.915733869473707, 40.067177340554387 ], [ -6.907378121486168, 40.318654446111779 ] ] ] } }
+]
+}
