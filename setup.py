@@ -48,7 +48,7 @@ setuptools.setup(
     #scripts=glob.glob("bin/*.py"),
     packages=["pb_gee_tools", "pb_gee_tools/change"],
     license="LICENSE.txt",
-    install_requires=["earthengine-api"],
+    install_requires=["earthengine-api", "geopandas"],
     url="https://github.com/petebunting/pb_gee_tools",
     classifiers=[
         "Intended Audience :: Developers",
@@ -59,5 +59,6 @@ setuptools.setup(
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
     ],
 )
