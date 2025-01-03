@@ -10,5 +10,3 @@ Dates and Times
 
 
 * :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
