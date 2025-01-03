@@ -4,7 +4,7 @@ from typing import Union, List, Tuple
 import geopandas
 
 
-def get_vec_file_bbox_wgs84(vec_file, vec_lyr=None):
+def get_vec_file_bbox_wgs84(vec_file: str, vec_lyr: str = None):
     """
     :param vec_file: A file path to the vector file that contains the spatial data.
     :param vec_lyr: The name of the layer within the vector file to be used
