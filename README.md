@@ -7,3 +7,7 @@ Specifically, these tools are mainly focused on accessing EO datasets and applyi
 ## Install using pip
 
 `pip install .`
+
+## Documentation
+
+Documentation is avaiable here: [https://pb-gee-tools.readthedocs.io](https://pb-gee-tools.readthedocs.io)
