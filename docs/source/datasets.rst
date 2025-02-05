@@ -4,6 +4,7 @@ Get Datasets
 Landsat
 ---------
 .. autofunction:: pb_gee_tools.datasets.get_landsat_sr_collection
+.. autofunction:: pb_gee_tools.datasets.get_landsat_thermal_collection
 
 Sentinel-2
 ------------
@@ -18,6 +19,7 @@ Sentinel-1
 MODIS
 ---------
 .. autofunction:: pb_gee_tools.datasets.get_modis_albedo_collection
+.. autofunction:: pb_gee_tools.datasets.get_modis_daily_obs_temp_collection
 
 Constants
 -----------

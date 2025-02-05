@@ -233,6 +233,197 @@ def get_landsat_sr_collection(
     return out_col
 
 
+def get_landsat_thermal_collection(
+    aoi: ee.Geometry,
+    start_date: datetime.datetime,
+    end_date: datetime.datetime,
+    cloud_thres: int = 50,
+    ignore_ls7: bool = False,
+) -> ee.ImageCollection:
+    """
+    A function which returns an GEE Image Collection of surface temperature
+    Landsat imagery merging the data from different Landsat sensors
+    (e.g., Landsat 5 and Landsat 7) where the cloud masks have been applied.
+
+    :param aoi: an ee.Geometry object representing the area of interest
+    :param start_date: the start date for the collection
+    :param end_date: the end date for the collection
+    :param cloud_thres: a cloud threshold for the scenes to be included
+    :param ignore_ls7: A boolean specifying whether to ignore landsat 7 should be
+                       ignored which might be preferable to the SLC-off error.
+                       Default: False
+    :return: A GEE Image Collection of the landsat images.
+
+    """
+    ls_start = datetime.datetime(year=1982, month=7, day=16)
+    ls_end = datetime.datetime.now()
+
+    if not pb_gee_tools.utils.do_dates_overlap(
+        s1_date=start_date, e1_date=end_date, s2_date=ls_start, e2_date=ls_end
+    ):
+        raise Exception(
+            "Date range specified does not overlap "
+            "with the availability of Landsat imagery."
+        )
+
+    ee_start_date = ee.Date.fromYMD(
+        ee.Number(start_date.year),
+        ee.Number(start_date.month),
+        ee.Number(start_date.day),
+    )
+    ee_end_date = ee.Date.fromYMD(
+        ee.Number(end_date.year), ee.Number(end_date.month), ee.Number(end_date.day)
+    )
+
+    def _read_ls_col(ls_col, aoi, start_date: ee.Date, end_date: ee.Date, cloud_thres):
+        return (
+            ls_col.filterBounds(aoi)
+            .filterDate(start_date, end_date)
+            .filter(f"CLOUD_COVER < {cloud_thres}")
+        )
+
+    def _mask_clouds(img):
+        qa_mask = (
+            img.select("QA_PIXEL").bitwiseAnd(int("11111", 2)).eq(0).rename("QA_MASK")
+        )
+        sat_mask = img.select("QA_RADSAT").eq(0)
+        return img.updateMask(qa_mask).updateMask(sat_mask)
+
+    def _oli_band_sel_rename(img):
+        return img.select(
+            ["ST_B10"],
+            ["Thermal"],
+        )
+
+    def _etm_band_sel_rename(img):
+        return img.select(
+            ["ST_B6"],
+            ["Thermal"],
+        )
+
+    def _tm_band_sel_rename(img):
+        return img.select(
+            ["ST_B6"],
+            ["Thermal"],
+        )
+
+    def _oli_apply_scale_factors(image):
+        thermal_bands = (
+            image.select("ST_B10").multiply(0.00341802).add(149.0)  # .multiply(10000)
+        )
+        return image.addBands(thermal_bands, None, True)
+
+    def _tm_apply_scale_factors(image):
+        thermal_bands = (
+            image.select("ST_B6").multiply(0.00341802).add(149.0)  # .multiply(10000)
+        )
+        return image.addBands(thermal_bands, None, True)
+
+    lc09_col = ee.ImageCollection("LANDSAT/LC09/C02/T1_L2")
+    lc08_col = ee.ImageCollection("LANDSAT/LC08/C02/T1_L2")
+    le07_col = ee.ImageCollection("LANDSAT/LE07/C02/T1_L2")
+    lt05_col = ee.ImageCollection("LANDSAT/LT05/C02/T1_L2")
+    lt04_col = ee.ImageCollection("LANDSAT/LT04/C02/T1_L2")
+
+    ls4_start = datetime.datetime(year=1982, month=8, day=1)
+    ls4_end = datetime.datetime(year=1993, month=12, day=31)
+
+    ls5_start = datetime.datetime(year=1984, month=3, day=1)
+    ls5_end = datetime.datetime(year=2013, month=6, day=1)
+
+    ls7_start = datetime.datetime(year=1999, month=3, day=1)
+    ls7_end = datetime.datetime(year=2022, month=3, day=1)
+
+    ls8_start = datetime.datetime(year=2013, month=3, day=1)
+    ls8_end = datetime.datetime.now()
+
+    ls9_start = datetime.datetime(year=2021, month=11, day=1)
+    ls9_end = datetime.datetime.now()
+
+    use_ls9 = False
+    use_ls8 = False
+    use_ls7 = False
+    use_ls5 = False
+    use_ls4 = False
+    if pb_gee_tools.utils.do_dates_overlap(
+        s1_date=start_date, e1_date=end_date, s2_date=ls9_start, e2_date=ls9_end
+    ):
+        use_ls9 = True
+    if pb_gee_tools.utils.do_dates_overlap(
+        s1_date=start_date, e1_date=end_date, s2_date=ls8_start, e2_date=ls8_end
+    ):
+        use_ls8 = True
+    if pb_gee_tools.utils.do_dates_overlap(
+        s1_date=start_date, e1_date=end_date, s2_date=ls7_start, e2_date=ls7_end
+    ):
+        use_ls7 = True
+    if pb_gee_tools.utils.do_dates_overlap(
+        s1_date=start_date, e1_date=end_date, s2_date=ls5_start, e2_date=ls5_end
+    ):
+        use_ls5 = True
+    if pb_gee_tools.utils.do_dates_overlap(
+        s1_date=start_date, e1_date=end_date, s2_date=ls4_start, e2_date=ls4_end
+    ):
+        use_ls4 = True
+    if ignore_ls7:
+        use_ls7 = False
+
+    if use_ls4:
+        ls4_img_col = _read_ls_col(
+            lt04_col, aoi, ee_start_date, ee_end_date, cloud_thres
+        )
+        ls4_img_col = ls4_img_col.map(_tm_apply_scale_factors)
+
+        ls4_img_col = ls4_img_col.map(_mask_clouds).map(_tm_band_sel_rename)
+        out_col = ls4_img_col
+    if use_ls5:
+        ls5_img_col = _read_ls_col(
+            lt05_col, aoi, ee_start_date, ee_end_date, cloud_thres
+        )
+        ls5_img_col = ls5_img_col.map(_tm_apply_scale_factors)
+
+        ls5_img_col = ls5_img_col.map(_mask_clouds).map(_tm_band_sel_rename)
+        if not use_ls4:
+            out_col = ls5_img_col
+        else:
+            out_col = out_col.merge(ls5_img_col)
+    if use_ls7:
+        ls7_img_col = _read_ls_col(
+            le07_col, aoi, ee_start_date, ee_end_date, cloud_thres
+        )
+        ls7_img_col = ls7_img_col.map(_tm_apply_scale_factors)
+
+        ls7_img_col = ls7_img_col.map(_mask_clouds).map(_etm_band_sel_rename)
+        if (not use_ls4) and (not use_ls5):
+            out_col = ls7_img_col
+        else:
+            out_col = out_col.merge(ls7_img_col)
+    if use_ls8:
+        ls8_img_col = _read_ls_col(
+            lc08_col, aoi, ee_start_date, ee_end_date, cloud_thres
+        )
+        ls8_img_col = ls8_img_col.map(_oli_apply_scale_factors)
+
+        ls8_img_col = ls8_img_col.map(_mask_clouds).map(_oli_band_sel_rename)
+        if (not use_ls4) and (not use_ls5) and (not use_ls7):
+            out_col = ls8_img_col
+        else:
+            out_col = out_col.merge(ls8_img_col)
+    if use_ls9:
+        ls9_img_col = _read_ls_col(
+            lc09_col, aoi, ee_start_date, ee_end_date, cloud_thres
+        )
+        ls9_img_col = ls9_img_col.map(_oli_apply_scale_factors)
+
+        ls9_img_col = ls9_img_col.map(_mask_clouds).map(_oli_band_sel_rename)
+        if (not use_ls4) and (not use_ls5) and (not use_ls7) and (not use_ls8):
+            out_col = ls9_img_col
+        else:
+            out_col = out_col.merge(ls9_img_col)
+
+    return out_col
+
+
 def get_sen2_sr_collection(
     aoi: ee.Geometry,
     start_date: datetime.datetime,
@@ -843,3 +1034,53 @@ def get_modis_albedo_collection(
             "Albedo_WSA_shortwave",
         ]
     )
+
+
+def get_modis_daily_obs_temp_collection(
+    aoi: ee.Geometry,
+    start_date: datetime.datetime,
+    end_date: datetime.datetime,
+):
+    """
+    A function which retrieves MODIS/061/MOD21A1D and MODIS/061/MOD21A1N image collections
+    and masks them to all the valid pixels (QC bit 0 == 0). The function returns two image
+    collections, one for the daytime temperature and other for the nighttime tempture.
+
+    :param aoi: An Earth Engine Geometry representing the Area of Interest (AOI).
+    :param start_date: A Python datetime object indicating the start date for filtering MODIS images.
+    :param end_date: A Python datetime object indicating the end date for filtering MODIS images.
+    :return: A tuple containing two Earth Engine ImageCollections representing the filtered MODIS
+             daily and nightly temperature images respectively.
+
+    """
+    modis_day_temp_img_col = (
+        ee.ImageCollection("MODIS/061/MOD21A1D")
+        .filterBounds(aoi)
+        .filterDate(start_date, end_date)
+    )
+
+    modis_night_temp_img_col = (
+        ee.ImageCollection("MODIS/061/MOD21A1N")
+        .filterBounds(aoi)
+        .filterDate(start_date, end_date)
+    )
+
+    def _msk_valid_pixels(image):
+        # Select the quality band.
+        qa = image.select("QC")
+
+        # Create a bit mask for bit 0.
+        valid_bit = 1 << 0  # This creates a mask for bit 0.
+
+        # Create a mask: pixels where the bitwise AND of 'QC'
+        # with valid_bit equals 0 are valid.
+        valid_mask = qa.bitwiseAnd(valid_bit).eq(0)
+
+        # Update the image mask.
+        return image.updateMask(valid_mask)
+
+    # Apply the mask function to each image in the collection.
+    modis_day_temp_img_mskd_col = modis_day_temp_img_col.map(_msk_valid_pixels)
+    modis_night_temp_img_mskd_col = modis_night_temp_img_col.map(_msk_valid_pixels)
+
+    return modis_day_temp_img_mskd_col, modis_night_temp_img_mskd_col

@@ -1,7 +1,7 @@
 from distutils.version import LooseVersion
 
 PB_GEE_TOOLS_VERSION_MAJOR = 0
-PB_GEE_TOOLS_VERSION_MINOR = 3
+PB_GEE_TOOLS_VERSION_MINOR = 4
 PB_GEE_TOOLS_VERSION_PATCH = 0
 
 PB_GEE_TOOLS_VERSION = "{}.{}.{}".format(
