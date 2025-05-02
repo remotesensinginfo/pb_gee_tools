@@ -827,6 +827,52 @@ def get_sen2_sr_cloud_plus_collection(
         ["B2", "B3", "B4", "B5", "B6", "B7", "B8", "B8A", "B11", "B12"]
     )
 
+def get_sen2_toa_collection(
+    aoi: ee.Geometry,
+    start_date: datetime.datetime,
+    end_date: datetime.datetime,
+    cloud_thres: int = 50,
+) -> ee.ImageCollection:
+    """
+    A function to retrieve an ImageCollection of Top of Atmosphere
+    reflectance Sentinel-2 images.
+
+    :param aoi: ee.Geometry object representing the area of interest
+    :param start_date: datetime.datetime object representing the start date of data collection
+    :param end_date: datetime.datetime object representing the end date of data collection
+    :param cloud_thres: Integer representing the cloud cover threshold percentage
+    :return: ee.ImageCollection containing Sentinel-2 surface reflectance imagery
+    """
+    sen2_start = datetime.datetime(year=2015, month=7, day=1)
+    sen2_end = datetime.datetime.now()
+
+    if not pb_gee_tools.utils.do_dates_overlap(
+        s1_date=start_date, e1_date=end_date, s2_date=sen2_start, e2_date=sen2_end
+    ):
+        raise Exception(
+            "Date range specified does not overlap "
+            "with the availability of Sentinel-2 imagery."
+        )
+
+    ee_start_date = ee.Date.fromYMD(
+        ee.Number(start_date.year),
+        ee.Number(start_date.month),
+        ee.Number(start_date.day),
+    )
+    ee_end_date = ee.Date.fromYMD(
+        ee.Number(end_date.year), ee.Number(end_date.month), ee.Number(end_date.day)
+    )
+
+    # Import and filter S2 TOA.
+    s2_toa_col = (
+        ee.ImageCollection("COPERNICUS/S2_HARMONIZED")
+        .filterBounds(aoi)
+        .filterDate(ee_start_date, ee_end_date)
+        .filter(ee.Filter.lte("CLOUDY_PIXEL_PERCENTAGE", cloud_thres))
+    )
+
+    return s2_toa_col.select(["B2", "B3", "B4", "B5", "B6", "B7", "B8", "B8A", "B11", "B12"])
+
 
 def get_sen1_collection(
     aoi: ee.Geometry,
