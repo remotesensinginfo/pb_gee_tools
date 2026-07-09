@@ -1130,3 +1130,163 @@ def get_modis_daily_obs_temp_collection(
     modis_night_temp_img_mskd_col = modis_night_temp_img_col.map(_msk_valid_pixels)
 
     return modis_day_temp_img_mskd_col, modis_night_temp_img_mskd_col
+
+
+def get_modis_16d_250m_indices_collection(
+    aoi: ee.Geometry,
+    start_date: datetime.datetime,
+    end_date: datetime.datetime,
+):
+    """
+    A function to retrieve an image collection with the MODIS NDVI and EVI data
+    at 250 m resolution masked to the valid pixels.
+
+    :param aoi: An Earth Engine Geometry representing the area of interest.
+    :param start_date: A datetime object indicating the start date
+                       for filtering image collection.
+    :param end_date: A datetime object indicating the end date for
+                     filtering image collection.
+    :return: A processed image collection containing MODIS NDVI band
+             with quality masking applied.
+
+    """
+
+    def mask_modis_qa(img):
+        """
+        Masks MODIS MOD13Q1 pixels that are not classified as 'Good' or 'Marginal'
+        using the SummaryQA band.
+        """
+        # Select the SummaryQA band
+        qa = img.select('SummaryQA')
+
+        # Create a mask where pixels are 0 (Good) or 1 (Marginal)
+        # SummaryQA values: 0 = Good, 1 = Marginal, 2 = Snow/Ice, 3 = Cloudy
+        valid_mask = qa.lte(1)
+
+        # Update the original image mask and copy properties
+        return img.updateMask(valid_mask)
+
+    modis_img_col = (
+        ee.ImageCollection("MODIS/061/MOD13Q1")
+        .filterBounds(aoi)
+        .filterDate(start_date, end_date)
+    )
+
+    modis_img_qad_col = modis_img_col.map(mask_modis_qa)
+    modis_img_qad_scaled_col = modis_img_qad_col.multiply(0.0001)
+
+    return modis_img_qad_scaled_col
+
+
+def get_palsar2_collection(
+    aoi: ee.Geometry,
+    start_date: datetime.datetime,
+    end_date: datetime.datetime,
+    add_ndpi: bool = False,
+):
+    """
+    A function to retrieve an image collection of PALSAR-2 ScanSAR imagery in dB.
+
+    :param aoi: Area of interest defined as a geometry where Sentinel-1
+                imagery will be collected.
+    :param start_date: Start date for the time range of Sentinel-1 imagery collection.
+    :param end_date: End date for the time range of Sentinel-1 imagery collection.
+    :param add_ndpi: Boolean flag to indicate whether to add Normalized Difference
+                     Polarization Index (NDPI) band to the image collection.
+    :return: An ImageCollection filtered by the specified parameters
+             for PALSAR-2 ScanSAR imagery data.
+
+    """
+    def _calibrate_to_gamma_nought(sar_img):
+        """
+        Converts raw DN to gamma-nought backscatter in linear power space.
+        Formula: γ0 = 10*log10(DN2) - 83.0 dB
+        """
+        # Calibration factor for ALOS-2
+        cf = -83.0
+        constant_img = ee.Image.constant(cf).toFloat()
+
+        # Correct formula for dB: 10 * log10(DN^2) + (-83.0)
+        gamma0_hh_db = (
+            sar_img.select('HH')
+            .pow(2)
+            .log10()
+            .multiply(10)
+            .add(constant_img)  # Changed from subtract to add
+            .rename('HH_gamma0_db')
+            .toFloat()
+        )
+
+        gamma0_hv_db = (
+            sar_img.select('HV')
+            .pow(2)
+            .log10()
+            .multiply(10)
+            .add(constant_img)  # Changed from subtract to add
+            .rename('HV_gamma0_db')
+            .toFloat()
+        )
+
+        if add_ndpi:
+            cf = -83.0
+            linear_multiplier = ee.Image.constant(10 ** (cf / 10.0)).toFloat()
+
+            # 2. Calculate gamma-nought power for HH
+            gamma0_hh = (
+                sar_img.select('HH')
+                .pow(2)
+                .multiply(linear_multiplier)
+                .rename('HH_gamma0')
+                .toFloat()
+            )
+
+            # 3. Calculate gamma-nought power for HV (using the exact same logic)
+            gamma0_hv = (
+                sar_img.select('HV')
+                .pow(2)
+                .multiply(linear_multiplier)
+                .rename('HV_gamma0')
+                .toFloat()
+            )
+
+            # 4. Compute NDPI using the calibrated linear bands
+            # Formula: (HH - HV) / (HH + HV)
+            ndpi_img = (
+                gamma0_hh.subtract(gamma0_hv)
+                .divide(gamma0_hh.add(gamma0_hv))
+                .rename('NDPI')
+                .toFloat()
+            )
+            sar_img = sar_img.addBands(ndpi_img)
+
+        return sar_img.addBands(gamma0_hh_db).addBands(gamma0_hv_db)
+
+    palsar2_start = datetime.datetime(year=2014, month=8, day=1)
+    palsar2_end = datetime.datetime.now()
+
+    if not pb_gee_tools.utils.do_dates_overlap(
+        s1_date=start_date, e1_date=end_date, s2_date=palsar2_start, e2_date=palsar2_end
+    ):
+        raise Exception(
+            "Date range specified does not overlap "
+            "with the availability of PALSAR-2 imagery."
+        )
+
+    ee_start_date = ee.Date.fromYMD(
+        ee.Number(start_date.year),
+        ee.Number(start_date.month),
+        ee.Number(start_date.day),
+    )
+    ee_end_date = ee.Date.fromYMD(
+        ee.Number(end_date.year), ee.Number(end_date.month), ee.Number(end_date.day)
+    )
+
+    palsar_img_col = (
+        ee.ImageCollection("JAXA/ALOS/PALSAR-2/Level2_2/ScanSAR")
+        .filterBounds(aoi)
+        .filterDate(ee_start_date, ee_end_date)
+    )
+
+    palsar_img_col = palsar_img_col.map(_calibrate_to_gamma_nought)
+
+    return palsar_img_col

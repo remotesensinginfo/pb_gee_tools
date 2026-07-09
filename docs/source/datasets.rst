@@ -20,6 +20,11 @@ MODIS
 ---------
 .. autofunction:: pb_gee_tools.datasets.get_modis_albedo_collection
 .. autofunction:: pb_gee_tools.datasets.get_modis_daily_obs_temp_collection
+.. autofunction:: pb_gee_tools.datasets.get_modis_16d_250m_indices_collection
+
+ALOS
+------------
+.. autofunction:: pb_gee_tools.datasets.get_sen1_collection
 
 Constants
 -----------
