@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=77.0.3"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pb_gee_tools"
+dynamic = ["version"]
+description = "A module with tools for supporting the use of the Google Earth Engine Python API and reducing work for repetitive or common tasks."
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Pete Bunting", email = "petebunting@mac.com" },
+]
+dependencies = [
+    "earthengine-api",
+    "geopandas",
+]
+classifiers = [
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
+
+[project.urls]
+Homepage = "https://github.com/petebunting/pb_gee_tools"
+Documentation = "https://pb-gee-tools.readthedocs.io"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.dynamic]
+version = { attr = "pb_gee_tools.__version__" }
+
+[tool.setuptools.packages.find]
+include = ["pb_gee_tools*"]
