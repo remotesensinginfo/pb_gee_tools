@@ -1178,7 +1178,7 @@ def get_modis_16d_250m_indices_collection(
     return modis_img_qad_scaled_col
 
 
-def get_palsar2_collection(
+def get_palsar2_scansar_collection(
     aoi: ee.Geometry,
     start_date: datetime.datetime,
     end_date: datetime.datetime,
